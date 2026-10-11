@@ -1,6 +1,7 @@
 
--- NickoyPanel | Fixed GUI
+-- NickoyPanel | Fixed Egg GUI
 -- Place in StarterPlayer > StarterPlayerScripts
+-- Requires EggGameServer in ServerScriptService
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -12,18 +13,24 @@ local purple = Color3.fromRGB(120, 75, 230)
 local dark = Color3.fromRGB(29, 24, 43)
 local white = Color3.fromRGB(255, 255, 255)
 
--- Remove an older copy if present
+-- Remove an older copy
 local oldGui = playerGui:FindFirstChild("NickoyPanel")
 if oldGui then
     oldGui:Destroy()
 end
 
--- Create GUI first, so missing game objects won't hide it
+-- Main GUI
 local gui = Instance.new("ScreenGui")
 gui.Name = "NickoyPanel"
 gui.ResetOnSpawn = false
 gui.DisplayOrder = 100
 gui.Parent = playerGui
+
+local function round(instance, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = instance
+end
 
 local toggle = Instance.new("TextButton")
 toggle.Name = "TogglePanel"
@@ -35,7 +42,7 @@ toggle.Text = "NICKOY  ☰"
 toggle.Font = Enum.Font.GothamBold
 toggle.TextSize = 14
 toggle.Parent = gui
-Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 9)
+round(toggle, 9)
 
 local panel = Instance.new("Frame")
 panel.Name = "MainPanel"
@@ -43,9 +50,8 @@ panel.Size = UDim2.fromOffset(270, 300)
 panel.Position = UDim2.new(0, 20, 0, 125)
 panel.BackgroundColor3 = dark
 panel.BorderSizePixel = 0
-panel.Visible = true
 panel.Parent = gui
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 14)
+round(panel, 14)
 
 toggle.Activated:Connect(function()
     panel.Visible = not panel.Visible
@@ -81,6 +87,7 @@ local eggLabel = makeLabel(
 )
 
 local hatchButton = Instance.new("TextButton")
+hatchButton.Name = "HatchButton"
 hatchButton.Position = UDim2.fromOffset(12, 76)
 hatchButton.Size = UDim2.new(1, -24, 0, 42)
 hatchButton.BackgroundColor3 = purple
@@ -89,10 +96,10 @@ hatchButton.TextColor3 = white
 hatchButton.Font = Enum.Font.GothamBold
 hatchButton.TextSize = 15
 hatchButton.Parent = panel
-Instance.new("UICorner", hatchButton).CornerRadius = UDim.new(0, 9)
+round(hatchButton, 9)
 
 local status = makeLabel(
-    "Panel loaded. Waiting for egg system...",
+    "Collect an egg to begin!",
     UDim2.fromOffset(12, 121),
     UDim2.new(1, -24, 0, 32),
     panel
@@ -108,6 +115,7 @@ local petTitle = makeLabel(
 petTitle.TextXAlignment = Enum.TextXAlignment.Left
 
 local petList = Instance.new("ScrollingFrame")
+petList.Name = "PetList"
 petList.Position = UDim2.fromOffset(12, 181)
 petList.Size = UDim2.new(1, -24, 0, 105)
 petList.BackgroundColor3 = Color3.fromRGB(43, 36, 60)
@@ -116,26 +124,20 @@ petList.ScrollBarThickness = 5
 petList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 petList.CanvasSize = UDim2.new()
 petList.Parent = panel
-Instance.new("UICorner", petList).CornerRadius = UDim.new(0, 8)
+round(petList, 8)
 
 local listLayout = Instance.new("UIListLayout")
 listLayout.Padding = UDim.new(0, 3)
 listLayout.Parent = petList
 
-local eggCount
-local petsFolder
-local hatchFunction
-local busy = false
+local function refreshInventory()
+    local count = player:FindFirstChild("EggCount")
+    local pets = player:FindFirstChild("Pets")
 
-local function connectInventory()
-    eggCount = player:FindFirstChild("EggCount")
-    petsFolder = player:FindFirstChild("Pets")
-    hatchFunction = ReplicatedStorage:FindFirstChild("HatchEgg")
-
-    if eggCount and eggCount:IsA("IntValue") then
-        eggLabel.Text = "Eggs: " .. eggCount.Value
+    if count and count:IsA("IntValue") then
+        eggLabel.Text = "Eggs: " .. count.Value
     else
-        eggLabel.Text = "Eggs: unavailable"
+        eggLabel.Text = "Eggs: loading..."
     end
 
     for _, child in ipairs(petList:GetChildren()) do
@@ -144,68 +146,88 @@ local function connectInventory()
         end
     end
 
-    if petsFolder then
-        local total = 0
-        for _, pet in ipairs(petsFolder:GetChildren()) do
-            total += 1
-            local label = makeLabel(
-                "🐾 " .. pet.Name,
-                UDim2.new(),
-                UDim2.new(1, -8, 0, 24),
-                petList
-            )
-            label.TextXAlignment = Enum.TextXAlignment.Left
-        end
+    if not pets then
+        makeLabel(
+            "Waiting for pet inventory...",
+            UDim2.new(),
+            UDim2.new(1, -8, 0, 24),
+            petList
+        )
+        return
+    end
 
-        if total == 0 then
-            makeLabel("No pets yet", UDim2.new(),
-                UDim2.new(1, -8, 0, 24), petList)
-        end
-    else
-        makeLabel("Pet inventory unavailable",
-            UDim2.new(), UDim2.new(1, -8, 0, 24), petList)
+    local total = 0
+
+    for _, pet in ipairs(pets:GetChildren()) do
+        total += 1
+        local label = makeLabel(
+            "🐾 " .. pet.Name,
+            UDim2.new(),
+            UDim2.new(1, -8, 0, 24),
+            petList
+        )
+        label.TextXAlignment = Enum.TextXAlignment.Left
+    end
+
+    if total == 0 then
+        makeLabel(
+            "No pets yet",
+            UDim2.new(),
+            UDim2.new(1, -8, 0, 24),
+            petList
+        )
     end
 end
 
+-- Update immediately when inventory changes
 task.spawn(function()
     while gui.Parent do
-        connectInventory()
-        task.wait(1)
+        refreshInventory()
+        task.wait(0.5)
     end
 end)
 
 hatchButton.Activated:Connect(function()
-    if busy then return end
-
-    eggCount = player:FindFirstChild("EggCount")
-    hatchFunction = ReplicatedStorage:FindFirstChild("HatchEgg")
-
-    if not eggCount or not hatchFunction then
-        status.Text = "Egg system missing. Check server script."
+    if hatchButton:GetAttribute("Busy") then
         return
     end
 
-    if eggCount.Value < 1 then
-        status.Text = "Steal an egg first!"
+    local count = player:FindFirstChild("EggCount")
+    local hatchFunction = ReplicatedStorage:FindFirstChild("HatchEgg")
+
+    if not count or not count:IsA("IntValue") then
+        status.Text = "Egg inventory is loading."
         return
     end
 
-    busy = true
+    if not hatchFunction or not hatchFunction:IsA("RemoteFunction") then
+        status.Text = "HatchEgg missing. Check EggGameServer."
+        return
+    end
+
+    if count.Value < 1 then
+        status.Text = "Collect an egg first!"
+        return
+    end
+
+    hatchButton:SetAttribute("Busy", true)
     hatchButton.Text = "HATCHING..."
 
-    local ok, success, result = pcall(function()
+    local callOK, success, result = pcall(function()
         return hatchFunction:InvokeServer()
     end)
 
-    if not ok then
-        status.Text = "Server error. Check Studio Output."
+    if not callOK then
+        status.Text = "Hatch failed. Check Studio Output."
     elseif success then
         status.Text = "You hatched: " .. tostring(result) .. "!"
     else
         status.Text = tostring(result or "Could not hatch egg.")
     end
 
-    connectInventory()
+    refreshInventory()
     hatchButton.Text = "BREAK AN EGG"
-    busy = false
+    hatchButton:SetAttribute("Busy", false)
 end)
+
+print("NickoyPanel loaded successfully.")
