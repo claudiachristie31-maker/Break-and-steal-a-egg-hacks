@@ -1,0 +1,174 @@
+
+-- NickoyPanel | Client GUI
+-- Place in StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local hatchFunction = ReplicatedStorage:WaitForChild("HatchEgg")
+local eggCount = player:WaitForChild("EggCount")
+local petsFolder = player:WaitForChild("Pets")
+
+local purple = Color3.fromRGB(120, 75, 230)
+local dark = Color3.fromRGB(29, 24, 43)
+local white = Color3.fromRGB(255, 255, 255)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "NickoyPanel"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local panel = Instance.new("Frame")
+panel.Size = UDim2.fromOffset(270, 300)
+panel.Position = UDim2.new(0, 20, 0.35, 0)
+panel.BackgroundColor3 = dark
+panel.BorderSizePixel = 0
+panel.Parent = gui
+
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 14)
+
+local function makeLabel(text, position, size, parent)
+    local label = Instance.new("TextLabel")
+    label.Position = position
+    label.Size = size
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = white
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 15
+    label.Parent = parent
+    return label
+end
+
+local title = makeLabel(
+    "NICKOY EGG PANEL",
+    UDim2.fromOffset(10, 8),
+    UDim2.new(1, -20, 0, 32),
+    panel
+)
+title.TextSize = 18
+
+local eggLabel = makeLabel(
+    "🥚 Eggs: 0",
+    UDim2.fromOffset(12, 45),
+    UDim2.new(1, -24, 0, 25),
+    panel
+)
+
+local hatchButton = Instance.new("TextButton")
+hatchButton.Position = UDim2.fromOffset(12, 78)
+hatchButton.Size = UDim2.new(1, -24, 0, 42)
+hatchButton.BackgroundColor3 = purple
+hatchButton.Text = "BREAK AN EGG"
+hatchButton.TextColor3 = white
+hatchButton.Font = Enum.Font.GothamBold
+hatchButton.TextSize = 15
+hatchButton.Parent = panel
+
+Instance.new("UICorner", hatchButton).CornerRadius = UDim.new(0, 9)
+
+local status = makeLabel(
+    "Steal an egg to get started!",
+    UDim2.fromOffset(12, 125),
+    UDim2.new(1, -24, 0, 30),
+    panel
+)
+status.TextSize = 12
+status.TextWrapped = true
+
+makeLabel(
+    "YOUR PETS",
+    UDim2.fromOffset(12, 158),
+    UDim2.new(1, -24, 0, 25),
+    panel
+).TextXAlignment = Enum.TextXAlignment.Left
+
+local petList = Instance.new("ScrollingFrame")
+petList.Position = UDim2.fromOffset(12, 186)
+petList.Size = UDim2.new(1, -24, 0, 100)
+petList.BackgroundColor3 = Color3.fromRGB(43, 36, 60)
+petList.BorderSizePixel = 0
+petList.ScrollBarThickness = 5
+petList.CanvasSize = UDim2.new(0, 0, 0, 0)
+petList.Parent = panel
+
+Instance.new("UICorner", petList).CornerRadius = UDim.new(0, 8)
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 3)
+layout.Parent = petList
+
+local function refreshEggs()
+    eggLabel.Text = "🥚 Eggs: " .. eggCount.Value
+    hatchButton.Text = eggCount.Value > 0
+        and "BREAK AN EGG"
+        or "NO EGGS AVAILABLE"
+end
+
+local function refreshPets()
+    for _, child in ipairs(petList:GetChildren()) do
+        if child:IsA("TextLabel") then
+            child:Destroy()
+        end
+    end
+
+    local total = 0
+    for _, pet in ipairs(petsFolder:GetChildren()) do
+        total += 1
+        makeLabel(
+            "🐾 " .. pet.Value,
+            UDim2.new(),
+            UDim2.new(1, -8, 0, 24),
+            petList
+        ).TextXAlignment = Enum.TextXAlignment.Left
+    end
+
+    if total == 0 then
+        makeLabel(
+            "No pets yet",
+            UDim2.new(),
+            UDim2.new(1, -8, 0, 24),
+            petList
+        )
+    end
+
+    petList.CanvasSize = UDim2.fromOffset(0, math.max(24, total * 27))
+end
+
+local busy = false
+
+hatchButton.Activated:Connect(function()
+    if busy then return end
+    if eggCount.Value < 1 then
+        status.Text = "Find and steal an egg first!"
+        return
+    end
+
+    busy = true
+    hatchButton.Text = "HATCHING..."
+
+    local callOK, gotPet, petName = pcall(function()
+        return hatchFunction:InvokeServer()
+    end)
+
+    if callOK and gotPet then
+        status.Text = "You hatched: " .. tostring(petName) .. "!"
+    elseif callOK then
+        status.Text = tostring(petName)
+    else
+        status.Text = "Couldn't hatch. Try again!"
+    end
+
+    refreshEggs()
+    refreshPets()
+    busy = false
+end)
+
+eggCount:GetPropertyChangedSignal("Value"):Connect(refreshEggs)
+petsFolder.ChildAdded:Connect(refreshPets)
+petsFolder.ChildRemoved:Connect(refreshPets)
+
+refreshEggs()
+refreshPets()
